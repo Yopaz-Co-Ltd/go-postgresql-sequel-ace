@@ -198,7 +198,7 @@ onMounted(async () => {
 
 async function loadSchemas() {
   try {
-    schemas.value = await getSchemas(props.sessionId)
+    schemas.value = (await getSchemas(props.sessionId)) || []
     selectedSchema.value = schemas.value.includes('public') ? 'public' : schemas.value[0] || ''
     await loadTables()
   } catch (error) {
@@ -209,7 +209,14 @@ async function loadSchemas() {
 async function loadTables() {
   if (!selectedSchema.value) return
   try {
-    tables.value = await getTables(props.sessionId, selectedSchema.value)
+    tables.value = (await getTables(props.sessionId, selectedSchema.value)) || []
+    if (!tables.value.length) {
+      const fallbackSchema = await findSchemaWithTables()
+      if (fallbackSchema && fallbackSchema !== selectedSchema.value) {
+        selectedSchema.value = fallbackSchema.schema
+        tables.value = fallbackSchema.tables
+      }
+    }
     if (tables.value.length) {
       const current = tables.value.find((table) => table.name === selectedTable.value)
       await selectTable((current || tables.value[0]).name)
@@ -217,6 +224,15 @@ async function loadTables() {
   } catch (error) {
     message.value = error.message
   }
+}
+
+async function findSchemaWithTables() {
+  for (const schema of schemas.value) {
+    if (schema === selectedSchema.value) continue
+    const schemaTables = (await getTables(props.sessionId, schema)) || []
+    if (schemaTables.length) return { schema, tables: schemaTables }
+  }
+  return null
 }
 
 async function selectTable(table) {

@@ -173,7 +173,7 @@ func (s *server) databases(w http.ResponseWriter, r *http.Request) {
 	}
 	defer rows.Close()
 
-	var names []string
+	names := []string{}
 	for rows.Next() {
 		var name string
 		if err := rows.Scan(&name); err != nil {
@@ -204,7 +204,7 @@ func (s *server) schemas(w http.ResponseWriter, r *http.Request) {
 	}
 	defer rows.Close()
 
-	var schemas []string
+	schemas := []string{}
 	for rows.Next() {
 		var schema string
 		if err := rows.Scan(&schema); err != nil {
@@ -243,7 +243,7 @@ func (s *server) tables(w http.ResponseWriter, r *http.Request) {
 		Name string `json:"name"`
 		Type string `json:"type"`
 	}
-	var tables []table
+	tables := []table{}
 	for rows.Next() {
 		var t table
 		if err := rows.Scan(&t.Name, &t.Type); err != nil {
