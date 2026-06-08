@@ -189,7 +189,10 @@ const filteredTables = computed(() => {
   return tables.value.filter((table) => table.name.toLowerCase().includes(needle))
 })
 
-const displayRows = computed(() => formatNumber(tableInformation.value.rows || rowCount.value || 0))
+const displayRows = computed(() => {
+  const estimatedRows = Number(tableInformation.value.rows || 0)
+  return formatNumber(estimatedRows > 0 ? estimatedRows : rowCount.value || 0)
+})
 const windowTitle = computed(() => `(PostgreSQL) ${props.connectionName}/${selectedSchema.value}/${selectedTable.value || ''}`)
 
 onMounted(async () => {
