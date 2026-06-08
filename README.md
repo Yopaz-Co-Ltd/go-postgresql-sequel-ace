@@ -9,6 +9,22 @@ Dark-mode PostgreSQL client with a Vue frontend and Go backend. The browser UI t
 
 ## Run
 
+Start the sample PostgreSQL database:
+
+```bash
+cd postgresql
+docker compose up -d
+```
+
+Sample connection:
+
+- Host: `127.0.0.1`
+- Port: `5432`
+- Username: `postgres`
+- Password: `postgres`
+- Database: `sample_store`
+- SSL Mode: `disable`
+
 ```bash
 cd backend
 go run .
@@ -34,3 +50,11 @@ go run .
 ```
 
 When `frontend/dist` exists, the Go server serves it at `http://localhost:8080`.
+
+## Reset Sample Database
+
+```bash
+cd postgresql
+docker compose down -v
+docker compose up -d
+```
