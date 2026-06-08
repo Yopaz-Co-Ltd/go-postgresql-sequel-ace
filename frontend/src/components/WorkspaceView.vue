@@ -1,57 +1,89 @@
 <template>
-  <section class="workspace">
-    <aside class="sidebar">
-      <div class="window-controls">
-        <span class="red"></span>
+  <section class="content-window">
+    <header class="content-titlebar">
+      <div class="traffic-lights">
+        <button type="button" class="red" title="Disconnect" @click="$emit('disconnect')"><X :size="11" /></button>
         <span class="yellow"></span>
         <span class="green"></span>
       </div>
-
-      <div class="connection-title">
-        <Database :size="18" />
-        <span>{{ connectionName }}</span>
-      </div>
-
-      <select v-model="selectedSchema" class="schema-select" @change="loadTables">
+      <strong>{{ windowTitle }}</strong>
+      <select v-model="selectedSchema" class="content-db-select" @change="loadTables">
         <option v-for="schema in schemas" :key="schema" :value="schema">{{ schema }}</option>
       </select>
+      <nav class="content-tools" aria-label="Table tools">
+        <button v-for="tool in tools" :key="tool.label" type="button" :class="{ active: tool.label === 'Content' }">
+          <component :is="tool.icon" :size="24" />
+          <span>{{ tool.label }}</span>
+        </button>
+      </nav>
+    </header>
 
-      <div class="table-list">
+    <aside class="content-sidebar">
+      <label class="sidebar-filter">
+        <Search :size="17" />
+        <input v-model="tableFilter" placeholder="Filter" />
+      </label>
+
+      <div class="sidebar-tables">
+        <h2>TABLES</h2>
         <button
-          v-for="table in tables"
+          v-for="table in filteredTables"
           :key="table.name"
           type="button"
           :class="{ selected: table.name === selectedTable }"
           @click="selectTable(table.name)"
         >
-          <Table2 :size="16" />
+          <Grid2X2 :size="18" />
           <span>{{ table.name }}</span>
         </button>
       </div>
+
+      <section class="table-information">
+        <h2>TABLE INFORMATION</h2>
+        <p><span></span>created: {{ tableInformation.created }}</p>
+        <p><span></span>engine: PostgreSQL</p>
+        <p><span></span>rows: {{ displayRows }}</p>
+        <p><span></span>size: {{ tableInformation.size }}</p>
+        <p><span></span>schema: {{ selectedSchema || '-' }}</p>
+        <p><span></span>columns: {{ tableInformation.columns.length }}</p>
+      </section>
+
+      <footer class="content-sidebar-footer">
+        <button type="button" title="Add"><Plus :size="17" /></button>
+        <button type="button" title="Options"><CircleEllipsis :size="17" /></button>
+        <button type="button" title="Refresh" @click="loadTables"><RefreshCw :size="17" /></button>
+        <button type="button" title="Preview"><Eye :size="18" /></button>
+        <button type="button" title="Resize"><PanelLeftClose :size="16" /></button>
+      </footer>
     </aside>
 
-    <div class="main-pane">
-      <header class="toolbar">
-        <div class="toolbar-group">
-          <button type="button" title="Refresh" @click="refresh"><RefreshCw :size="18" /></button>
-          <button type="button" title="Run SQL" @click="executeSql"><Play :size="18" /></button>
-        </div>
-        <div class="title-stack">
-          <strong>{{ selectedTable || 'SQL Console' }}</strong>
-          <span>{{ rowCount }} rows</span>
-        </div>
-        <button type="button" title="Disconnect" @click="$emit('disconnect')"><LogOut :size="18" /></button>
-      </header>
-
-      <div class="sql-editor">
-        <textarea v-model="sql" spellcheck="false"></textarea>
+    <main class="content-main">
+      <div class="content-filterbar">
+        <input v-model="filterEnabled" class="filter-check" type="checkbox" />
+        <select v-model="filterColumn">
+          <option v-for="column in tableInformation.columns" :key="column.name" :value="column.name">
+            {{ column.name }}
+          </option>
+        </select>
+        <select v-model="filterOperator">
+          <option value="contains">contains</option>
+          <option value="=">=</option>
+          <option value="!=">!=</option>
+        </select>
+        <input v-model="filterValue" class="filter-input" />
+        <button type="button" title="Remove filter"><Minus :size="16" /></button>
+        <button type="button" title="Add filter"><Plus :size="16" /></button>
+        <button class="apply-filter" type="button" @click="applyFilter">Apply Filter(s)</button>
       </div>
 
-      <div class="data-grid">
+      <div class="content-grid">
         <table v-if="columns.length">
           <thead>
             <tr>
-              <th v-for="column in columns" :key="column">{{ column }}</th>
+              <th v-for="column in columns" :key="column" :style="{ width: columnWidth(column) }">
+                <span>{{ column }}</span>
+                <small>{{ columnType(column) }}</small>
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -66,17 +98,55 @@
         </div>
       </div>
 
-      <footer class="statusbar">
-        <span>{{ message || 'Ready' }}</span>
+      <footer class="content-statusbar">
+        <div class="status-tools">
+          <button type="button" title="Insert row"><Plus :size="17" /></button>
+          <button type="button" title="Delete row"><Minus :size="17" /></button>
+          <button type="button" title="Duplicate row"><CopyPlus :size="16" /></button>
+          <button type="button" title="Refresh" @click="refresh"><RefreshCw :size="16" /></button>
+          <button type="button" title="Filter"><Filter :size="16" /></button>
+          <label>
+            <Search :size="16" />
+            <input v-model="columnSearch" placeholder="Filter Columns" />
+          </label>
+        </div>
+        <strong>{{ displayRows }} rows in table</strong>
+        <div class="status-pager">
+          <button type="button" title="Previous"><ChevronLeft :size="17" /></button>
+          <button type="button" title="More"><CircleEllipsis :size="17" /></button>
+          <button type="button" title="Next"><ChevronRight :size="17" /></button>
+        </div>
       </footer>
-    </div>
+    </main>
   </section>
 </template>
 
 <script setup>
-import { onMounted, ref } from 'vue'
-import { Database, LogOut, Play, RefreshCw, Rows3, Table2 } from '@lucide/vue'
-import { getSchemas, getTableRows, getTables, runQuery } from '../api'
+import { computed, onMounted, ref } from 'vue'
+import {
+  Bolt,
+  ChevronLeft,
+  ChevronRight,
+  CircleEllipsis,
+  Clock3,
+  CopyPlus,
+  Eye,
+  Filter,
+  Grid2X2,
+  Info,
+  List,
+  Minus,
+  PanelLeftClose,
+  Plus,
+  RefreshCw,
+  Rows3,
+  Search,
+  Shuffle,
+  TerminalSquare,
+  Users,
+  X,
+} from '@lucide/vue'
+import { getSchemas, getTableInfo, getTableRows, getTables, runQuery } from '../api'
 
 const props = defineProps({
   sessionId: { type: String, required: true },
@@ -89,11 +159,38 @@ const schemas = ref([])
 const tables = ref([])
 const selectedSchema = ref('public')
 const selectedTable = ref('')
+const tableFilter = ref('')
 const columns = ref([])
 const rows = ref([])
 const rowCount = ref(0)
 const message = ref('')
-const sql = ref('select now();')
+const filterEnabled = ref(true)
+const filterColumn = ref('')
+const filterOperator = ref('contains')
+const filterValue = ref('')
+const columnSearch = ref('')
+const tableInformation = ref({ created: '-', rows: 0, size: '-', columns: [] })
+
+const tools = [
+  { label: 'Structure', icon: Shuffle },
+  { label: 'Content', icon: List },
+  { label: 'Relations', icon: CopyPlus },
+  { label: 'Triggers', icon: Bolt },
+  { label: 'Table Info', icon: Info },
+  { label: 'Query', icon: TerminalSquare },
+  { label: 'Table History', icon: Clock3 },
+  { label: 'Users', icon: Users },
+  { label: 'Console', icon: Rows3 },
+]
+
+const filteredTables = computed(() => {
+  const needle = tableFilter.value.trim().toLowerCase()
+  if (!needle) return tables.value
+  return tables.value.filter((table) => table.name.toLowerCase().includes(needle))
+})
+
+const displayRows = computed(() => formatNumber(tableInformation.value.rows || rowCount.value || 0))
+const windowTitle = computed(() => `(PostgreSQL) ${props.connectionName}/${selectedSchema.value}/${selectedTable.value || ''}`)
 
 onMounted(async () => {
   await loadSchemas()
@@ -114,7 +211,8 @@ async function loadTables() {
   try {
     tables.value = await getTables(props.sessionId, selectedSchema.value)
     if (tables.value.length) {
-      await selectTable(tables.value[0].name)
+      const current = tables.value.find((table) => table.name === selectedTable.value)
+      await selectTable((current || tables.value[0]).name)
     }
   } catch (error) {
     message.value = error.message
@@ -123,14 +221,31 @@ async function loadTables() {
 
 async function selectTable(table) {
   selectedTable.value = table
-  sql.value = `select * from "${selectedSchema.value}"."${table}" limit 200;`
+  filterValue.value = ''
+  await loadTableInfo()
   await refresh()
+}
+
+async function loadTableInfo() {
+  if (!selectedSchema.value || !selectedTable.value) return
+  try {
+    const info = await getTableInfo(props.sessionId, selectedSchema.value, selectedTable.value)
+    tableInformation.value = {
+      created: '-',
+      rows: info.rows || 0,
+      size: info.size || '-',
+      columns: info.columns || [],
+    }
+    filterColumn.value = tableInformation.value.columns[0]?.name || ''
+  } catch (error) {
+    message.value = error.message
+  }
 }
 
 async function refresh() {
   if (!selectedSchema.value || !selectedTable.value) return
   try {
-    const result = await getTableRows(props.sessionId, selectedSchema.value, selectedTable.value)
+    const result = await getTableRows(props.sessionId, selectedSchema.value, selectedTable.value, 500)
     setResult(result)
     message.value = `Loaded ${result.count} rows`
   } catch (error) {
@@ -138,26 +253,63 @@ async function refresh() {
   }
 }
 
-async function executeSql() {
+async function applyFilter() {
+  if (!filterEnabled.value || !filterValue.value.trim() || !filterColumn.value) {
+    await refresh()
+    return
+  }
+
+  const value = escapeSql(filterValue.value.trim())
+  const column = quoteIdent(filterColumn.value)
+  const table = `${quoteIdent(selectedSchema.value)}.${quoteIdent(selectedTable.value)}`
+  const predicate =
+    filterOperator.value === 'contains'
+      ? `${column}::text ilike '%${value}%'`
+      : `${column}::text ${filterOperator.value} '${value}'`
+
   try {
-    const result = await runQuery(props.sessionId, sql.value)
+    const result = await runQuery(props.sessionId, `select * from ${table} where ${predicate} limit 500;`)
     setResult(result)
-    selectedTable.value = ''
-    message.value = `Query returned ${result.count} rows`
+    message.value = `Filter returned ${result.count} rows`
   } catch (error) {
     message.value = error.message
   }
 }
 
 function setResult(result) {
-  columns.value = result.columns || []
+  const rawColumns = result.columns || []
+  const needle = columnSearch.value.trim().toLowerCase()
+  columns.value = needle ? rawColumns.filter((column) => column.toLowerCase().includes(needle)) : rawColumns
   rows.value = (result.rows || []).map((row) => (typeof row === 'string' ? JSON.parse(row) : row))
   rowCount.value = result.count || 0
+}
+
+function columnType(column) {
+  return tableInformation.value.columns.find((item) => item.name === column)?.dataType || ''
+}
+
+function columnWidth(column) {
+  const type = columnType(column)
+  if (type.includes('TIMESTAMP')) return '210px'
+  if (type.includes('INT') || type.includes('NUMERIC')) return '96px'
+  return '180px'
 }
 
 function formatCell(value) {
   if (value === null || value === undefined) return 'NULL'
   if (typeof value === 'object') return JSON.stringify(value)
   return String(value)
+}
+
+function formatNumber(value) {
+  return new Intl.NumberFormat('de-DE').format(value)
+}
+
+function quoteIdent(value) {
+  return `"${String(value).replaceAll('"', '""')}"`
+}
+
+function escapeSql(value) {
+  return String(value).replaceAll("'", "''")
 }
 </script>

@@ -55,6 +55,20 @@ type rowsResponse struct {
 	Count   int               `json:"count"`
 }
 
+type tableInfoResponse struct {
+	Schema  string       `json:"schema"`
+	Name    string       `json:"name"`
+	Rows    int64        `json:"rows"`
+	Size    string       `json:"size"`
+	Columns []columnInfo `json:"columns"`
+}
+
+type columnInfo struct {
+	Name     string `json:"name"`
+	DataType string `json:"dataType"`
+	Nullable bool   `json:"nullable"`
+}
+
 func main() {
 	srv := newServer()
 	port := os.Getenv("PORT")
@@ -83,6 +97,7 @@ func newServer() *server {
 	s.mux.HandleFunc("GET /api/databases", s.databases)
 	s.mux.HandleFunc("GET /api/schemas", s.schemas)
 	s.mux.HandleFunc("GET /api/tables", s.tables)
+	s.mux.HandleFunc("GET /api/table-info", s.tableInfo)
 	s.mux.HandleFunc("GET /api/table-rows", s.tableRows)
 	s.mux.HandleFunc("POST /api/query", s.query)
 	s.mux.HandleFunc("DELETE /api/session", s.closeSession)
@@ -261,6 +276,76 @@ func (s *server) tableRows(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, resp)
+}
+
+func (s *server) tableInfo(w http.ResponseWriter, r *http.Request) {
+	pool, ok := s.poolFromRequest(w, r)
+	if !ok {
+		return
+	}
+
+	schema := r.URL.Query().Get("schema")
+	table := r.URL.Query().Get("table")
+	if schema == "" || table == "" {
+		writeError(w, http.StatusBadRequest, errors.New("schema and table are required"))
+		return
+	}
+
+	var info tableInfoResponse
+	info.Schema = schema
+	info.Name = table
+	if err := pool.QueryRow(r.Context(), `
+		select
+			coalesce(c.reltuples::bigint, 0) as estimated_rows,
+			pg_size_pretty(pg_total_relation_size(c.oid)) as total_size
+		from pg_class c
+		join pg_namespace n on n.oid = c.relnamespace
+		where n.nspname = $1
+		  and c.relname = $2
+	`, schema, table).Scan(&info.Rows, &info.Size); err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+
+	rows, err := pool.Query(r.Context(), `
+		select
+			column_name,
+			case
+				when data_type = 'character varying' then 'VARCHAR'
+				when data_type = 'timestamp without time zone' then 'TIMESTAMP'
+				when data_type = 'timestamp with time zone' then 'TIMESTAMPTZ'
+				when data_type = 'integer' then 'INT'
+				when data_type = 'bigint' then 'BIGINT'
+				when data_type = 'numeric' then 'NUMERIC'
+				when data_type = 'boolean' then 'BOOLEAN'
+				else upper(data_type)
+			end as data_type,
+			is_nullable = 'YES' as nullable
+		from information_schema.columns
+		where table_schema = $1
+		  and table_name = $2
+		order by ordinal_position
+	`, schema, table)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var column columnInfo
+		if err := rows.Scan(&column.Name, &column.DataType, &column.Nullable); err != nil {
+			writeError(w, http.StatusInternalServerError, err)
+			return
+		}
+		info.Columns = append(info.Columns, column)
+	}
+	if err := rows.Err(); err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, info)
 }
 
 func (s *server) query(w http.ResponseWriter, r *http.Request) {

@@ -38,6 +38,11 @@ export function getTableRows(sessionId, schema, table, limit = 200) {
   return request(`/api/table-rows?${params}`)
 }
 
+export function getTableInfo(sessionId, schema, table) {
+  const params = new URLSearchParams({ sessionId, schema, table })
+  return request(`/api/table-info?${params}`)
+}
+
 export function runQuery(sessionId, sql) {
   return request('/api/query', {
     method: 'POST',
