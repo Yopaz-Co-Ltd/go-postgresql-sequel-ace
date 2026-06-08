@@ -41,43 +41,217 @@ button:disabled {
 
 .connection-screen {
   display: grid;
+  grid-template-columns: 238px minmax(0, 1fr);
+  grid-template-rows: 70px minmax(0, 1fr);
   min-height: 100vh;
-  align-content: center;
+  overflow: hidden;
+  background: #22231f;
+}
+
+.login-titlebar {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: 104px 1fr auto auto;
+  align-items: start;
+  border-bottom: 1px solid #2b2d28;
+  background: #20211d;
+  padding: 14px 14px 0 22px;
+}
+
+.traffic-lights {
+  display: flex;
+  gap: 12px;
+  padding-top: 2px;
+}
+
+.traffic-lights span {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+}
+
+.login-titlebar strong {
+  color: #e2e2df;
+  font-size: 17px;
+  line-height: 20px;
+}
+
+.database-picker {
+  display: flex;
+  width: 176px;
+  height: 42px;
+  align-items: center;
   justify-content: center;
+  gap: 2px;
+  border: 1px solid #4f523e;
+  border-radius: 22px;
+  color: #85857d;
+  font-weight: 700;
+}
+
+.login-tools {
+  display: flex;
+  align-items: start;
   gap: 18px;
-  padding: 28px 22px;
+  padding-left: 28px;
+}
+
+.login-tools button {
+  display: grid;
+  width: 58px;
+  justify-items: center;
+  gap: 6px;
+  background: transparent;
+  color: #6e6f69;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.login-tools button.active {
+  color: #a7a79f;
+}
+
+.login-tools svg {
+  stroke-width: 2;
+}
+
+.favorites-sidebar {
+  display: grid;
+  min-height: 0;
+  grid-template-rows: auto auto minmax(0, 1fr) 34px;
+  border-right: 1px solid #060705;
+  background: #2b2c28;
+  padding-top: 18px;
+}
+
+.quick-connect {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 22px;
+  color: #9a9b95;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.favorites-sidebar h2 {
+  margin: 26px 0 12px;
+  padding: 0 36px;
+  color: #aaa9a4;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.favorites-list {
+  overflow: auto;
+  padding: 0 12px 12px;
+}
+
+.favorites-list button {
+  display: grid;
+  width: 100%;
+  height: 31px;
+  grid-template-columns: 18px minmax(0, 1fr);
+  align-items: center;
+  gap: 4px;
+  border-radius: 15px;
+  background: transparent;
+  padding: 0 18px 0 22px;
+  color: #efefeb;
+  text-align: left;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.favorites-list button.selected {
+  background: #9168a2;
+}
+
+.favorites-list span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.favorites-footer {
+  display: grid;
+  grid-template-columns: 32px 42px 42px 1fr;
+  align-items: center;
+  border-top: 1px solid #474942;
+  padding: 0 8px;
+}
+
+.favorites-footer button {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  background: transparent;
+  color: #b8b9b4;
+}
+
+.favorites-footer button:last-child {
+  justify-self: end;
+}
+
+.login-stage {
+  position: relative;
+  display: grid;
+  min-width: 0;
+  min-height: 0;
+  grid-template-rows: auto minmax(0, 1fr);
+  padding: 10px 0 0;
+}
+
+.connection-heading {
+  margin: 0;
+  color: #dfdfdc;
+  text-align: center;
+  font-size: 16px;
+  font-weight: 800;
+}
+
+.connection-stack {
+  display: grid;
+  width: 522px;
+  align-self: center;
+  justify-self: center;
+  gap: 10px;
+  transform: translateY(12px);
 }
 
 .connection-panel {
   position: relative;
-  width: min(852px, calc(100vw - 44px));
+  width: 506px;
   border: 1px solid #474943;
   border-radius: 8px;
   background: #2b2c28;
-  padding: 52px 84px 32px;
-  box-shadow: 0 18px 70px rgba(0, 0, 0, 0.32);
+  padding: 30px 50px 20px;
+  box-shadow: none;
 }
 
 .tabs {
   position: absolute;
-  top: -23px;
+  top: -14px;
   left: 50%;
   display: flex;
   overflow: hidden;
   transform: translateX(-50%);
-  border-radius: 8px;
-  background: #363733;
+  border-radius: 5px;
+  background: #343530;
 }
 
 .tab {
-  min-width: 96px;
-  height: 48px;
+  min-width: 70px;
+  height: 28px;
   border-left: 1px solid #555650;
   border-radius: 0;
   background: transparent;
   color: #d9d9d7;
-  font-size: 25px;
+  font-size: 16px;
   font-weight: 700;
+  white-space: nowrap;
 }
 
 .tab:first-child {
@@ -92,34 +266,34 @@ button:disabled {
 
 .connection-form {
   display: grid;
-  gap: 20px;
+  gap: 12px;
 }
 
 .connection-form label {
   display: grid;
-  grid-template-columns: 170px minmax(0, 1fr);
+  grid-template-columns: 106px minmax(0, 1fr);
   align-items: center;
-  gap: 14px;
+  gap: 8px;
 }
 
 .connection-form label > span:first-child {
   justify-self: end;
   color: #ddddda;
-  font-size: 27px;
+  font-size: 16px;
   font-weight: 700;
 }
 
 .connection-form input,
 .connection-form select {
   width: 100%;
-  height: 48px;
-  border: 2px solid #383a35;
-  border-radius: 12px;
+  height: 28px;
+  border: 1px solid #383a35;
+  border-radius: 7px;
   outline: 0;
   background: #22231f;
   color: #dededb;
-  padding: 0 14px;
-  font-size: 25px;
+  padding: 0 9px;
+  font-size: 16px;
   font-weight: 700;
 }
 
@@ -135,15 +309,20 @@ button:disabled {
 .swatches {
   display: flex;
   align-items: center;
-  gap: 20px;
-  padding-left: 184px;
+  gap: 12px;
+  padding-left: 166px;
 }
 
 .swatches button {
-  width: 26px;
-  height: 26px;
-  border: 3px solid rgba(0, 0, 0, 0.24);
+  width: 15px;
+  height: 15px;
+  border: 2px solid rgba(0, 0, 0, 0.24);
   border-radius: 50%;
+}
+
+.swatches button.selected {
+  outline: 2px solid #c7c7c3;
+  outline-offset: 2px;
 }
 
 .swatch-x {
@@ -153,47 +332,53 @@ button:disabled {
 
 .connection-form .check-row {
   display: flex;
-  gap: 14px;
-  padding-left: 184px;
+  gap: 8px;
+  padding-left: 106px;
 }
 
 .check-row input {
-  width: 32px;
-  height: 32px;
+  width: 19px;
+  height: 19px;
   accent-color: #0a84ff;
 }
 
 .connection-form .check-row span {
-  font-size: 25px;
+  font-size: 16px;
   font-weight: 700;
+  white-space: nowrap;
 }
 
 .connection-actions {
   display: grid;
-  grid-template-columns: 314px 276px 292px;
+  grid-template-columns: repeat(3, 1fr);
   gap: 1px;
   align-items: center;
+  width: 522px;
 }
 
 .connection-actions button {
-  height: 41px;
-  border-radius: 8px;
-  font-size: 23px;
+  height: 24px;
+  border-radius: 5px;
+  background: #3a3b35;
+  font-size: 14px;
   font-weight: 700;
 }
 
 .connection-actions .help-button {
   grid-column: 1 / 2;
-  width: 48px;
-  height: 48px;
+  width: 28px;
+  height: 28px;
   border-radius: 50%;
   justify-self: start;
 }
 
 .connection-actions .connect-button {
   grid-column: 3 / 4;
-  height: 48px;
-  font-size: 25px;
+  width: 174px;
+  height: 29px;
+  justify-self: end;
+  background: #0a84ff;
+  font-size: 16px;
 }
 
 .status-line {
@@ -201,7 +386,7 @@ button:disabled {
   margin: 0;
   color: #f1c35f;
   text-align: center;
-  font-size: 15px;
+  font-size: 13px;
 }
 
 .workspace {
