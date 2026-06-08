@@ -13,6 +13,15 @@
           <component :is="tool.icon" :size="24" />
           <span>{{ tool.label }}</span>
         </button>
+        <button
+          type="button"
+          class="theme-toggle"
+          :title="theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'"
+          @click="$emit('toggle-theme')"
+        >
+          <component :is="theme === 'dark' ? Sun : Moon" :size="24" />
+          <span>{{ theme === 'dark' ? 'Light' : 'Dark' }}</span>
+        </button>
       </nav>
     </header>
 
@@ -145,10 +154,12 @@ import {
   FolderPlus,
   Info,
   List,
+  Moon,
   PanelLeftClose,
   Plus,
   Rows3,
   Shuffle,
+  Sun,
   TerminalSquare,
   Users,
   X,
@@ -158,9 +169,10 @@ import {
 const props = defineProps({
   busy: Boolean,
   message: { type: String, default: '' },
+  theme: { type: String, default: 'light' },
 })
 
-const emit = defineEmits(['connect', 'test'])
+const emit = defineEmits(['connect', 'test', 'toggle-theme'])
 
 const storageKey = 'postgresql-client-favorites'
 

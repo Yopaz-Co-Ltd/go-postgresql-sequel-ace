@@ -15,6 +15,15 @@
           <component :is="tool.icon" :size="24" />
           <span>{{ tool.label }}</span>
         </button>
+        <button
+          type="button"
+          class="theme-toggle"
+          :title="theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'"
+          @click="$emit('toggle-theme')"
+        >
+          <component :is="theme === 'dark' ? Sun : Moon" :size="24" />
+          <span>{{ theme === 'dark' ? 'Light' : 'Dark' }}</span>
+        </button>
       </nav>
     </header>
 
@@ -136,12 +145,14 @@ import {
   Info,
   List,
   Minus,
+  Moon,
   PanelLeftClose,
   Plus,
   RefreshCw,
   Rows3,
   Search,
   Shuffle,
+  Sun,
   TerminalSquare,
   Users,
   X,
@@ -151,9 +162,10 @@ import { getSchemas, getTableInfo, getTableRows, getTables, runQuery } from '../
 const props = defineProps({
   sessionId: { type: String, required: true },
   connectionName: { type: String, required: true },
+  theme: { type: String, default: 'light' },
 })
 
-defineEmits(['disconnect'])
+defineEmits(['disconnect', 'toggle-theme'])
 
 const schemas = ref([])
 const tables = ref([])
