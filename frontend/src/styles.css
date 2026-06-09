@@ -1117,6 +1117,34 @@ button:disabled {
   justify-self: end;
 }
 
+.pager-jump {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg-surface-alt);
+  color: var(--text-tertiary);
+  padding: 0 8px;
+  height: 26px;
+}
+
+.pager-jump input {
+  width: 56px;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--text-primary);
+  text-align: right;
+  font: inherit;
+}
+
+.pager-total {
+  color: var(--text-tertiary);
+  font-size: 12px;
+  font-weight: 500;
+}
+
 @media (max-width: 760px) {
   .connection-screen {
     grid-template-columns: 1fr;

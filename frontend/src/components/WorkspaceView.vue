@@ -283,11 +283,19 @@
             <input v-model="columnSearch" placeholder="Filter Columns" />
           </label>
         </div>
-        <strong>{{ displayRows }} rows in table</strong>
+        <strong>{{ pageSummary }}</strong>
         <div class="status-pager">
-          <button type="button" title="Previous"><ChevronLeft :size="17" /></button>
-          <button type="button" title="More"><CircleEllipsis :size="17" /></button>
-          <button type="button" title="Next"><ChevronRight :size="17" /></button>
+          <button type="button" title="Previous page" :disabled="currentPage <= 1" @click="goToPage(currentPage - 1)">
+            <ChevronLeft :size="17" />
+          </button>
+          <label class="pager-jump">
+            <span>Page</span>
+            <input v-model.number="currentPage" type="number" min="1" :max="pageCount" @change="goToPage(currentPage)" />
+          </label>
+          <span class="pager-total">of {{ pageCount }}</span>
+          <button type="button" title="Next page" :disabled="currentPage >= pageCount" @click="goToPage(currentPage + 1)">
+            <ChevronRight :size="17" />
+          </button>
         </div>
       </footer>
     </main>
@@ -349,7 +357,11 @@ const tableFilter = ref('')
 const columns = ref([])
 const rows = ref([])
 const rowCount = ref(0)
+const totalRows = ref(0)
 const message = ref('')
+const currentPage = ref(1)
+const pageSize = ref(1000)
+const lastQueryFiltered = ref(false)
 const queryBusy = ref(false)
 const queryMessage = ref('')
 const queryText = ref('')
@@ -425,6 +437,16 @@ const displayRows = computed(() => {
   const estimatedRows = Number(tableInformation.value.rows || 0)
   return formatNumber(estimatedRows > 0 ? estimatedRows : rowCount.value || 0)
 })
+const pageCount = computed(() => Math.max(1, Math.ceil((totalRows.value || 0) / pageSize.value)))
+const pageSummary = computed(() => {
+  const visible = rowCount.value || 0
+  const total = totalRows.value || 0
+  if (!total) return '0 rows'
+  const noun = visible === 1 ? 'row' : 'rows'
+  return lastQueryFiltered.value
+    ? `${visible} ${noun} of ${total} matches filter`
+    : `${visible} ${noun} of ${total} rows`
+})
 const windowTitle = computed(() => `(PostgreSQL) ${props.connectionName}/${selectedSchema.value}/${selectedTable.value || ''}`)
 const queryLineNumbers = computed(() => Array.from({ length: Math.max(queryText.value.split('\n').length, 12) }, (_, index) => index + 1))
 const queryStatusText = computed(() => {
@@ -485,7 +507,7 @@ async function selectTable(table) {
     queryText.value = `select *\nfrom ${quoteIdent(selectedSchema.value)}.${quoteIdent(table)}\nlimit 100;`
   }
   if (activeTool.value === 'Content') {
-    await refresh()
+    await loadRows(1)
   }
 }
 
@@ -501,6 +523,10 @@ async function loadTableInfo() {
       indexes: info.indexes || [],
     }
     resetFilterRules()
+    currentPage.value = 1
+    totalRows.value = 0
+    rowCount.value = 0
+    lastQueryFiltered.value = false
   } catch (error) {
     message.value = error.message
   }
@@ -519,42 +545,56 @@ async function setActiveTool(tool) {
 }
 
 async function refresh() {
+  await loadRows(currentPage.value)
+}
+
+async function goToPage(page) {
+  const nextPage = Math.max(1, Math.min(Number(page) || 1, pageCount.value))
+  await loadRows(nextPage)
+}
+
+async function loadRows(page = 1) {
   if (!selectedSchema.value || !selectedTable.value) return
   try {
-    const result = await getTableRows(props.sessionId, selectedSchema.value, selectedTable.value, 500)
+    const { predicate, error } = buildWherePredicate()
+    if (error) {
+      message.value = error
+      return
+    }
+
+    const limit = pageSize.value
+    const offset = Math.max(0, (page - 1) * limit)
+    let result
+
+    if (predicate) {
+      lastQueryFiltered.value = true
+      const table = `${quoteIdent(selectedSchema.value)}.${quoteIdent(selectedTable.value)}`
+      result = await runQuery(props.sessionId, `select * from ${table} where ${predicate}`, {
+        limit,
+        offset,
+      })
+    } else {
+      lastQueryFiltered.value = false
+      result = await getTableRows(props.sessionId, selectedSchema.value, selectedTable.value, limit, page)
+    }
+
+    currentPage.value = page
     setResult(result)
-    message.value = `Loaded ${result.count} rows`
+    totalRows.value = Number(
+      predicate
+        ? (result.total || result.count || 0)
+        : (result.total || tableInformation.value.rows || result.count || 0),
+    )
+    message.value = predicate
+      ? `Loaded ${result.count} rows, ${totalRows.value} matches filter`
+      : `Loaded ${result.count} rows`
   } catch (error) {
     message.value = error.message
   }
 }
 
 async function applyFilter() {
-  if (!filterRules.value.length) {
-    await refresh()
-    return
-  }
-
-  const table = `${quoteIdent(selectedSchema.value)}.${quoteIdent(selectedTable.value)}`
-  const { predicate, error } = buildWherePredicate()
-
-  if (error) {
-    message.value = error
-    return
-  }
-
-  if (!predicate) {
-    await refresh()
-    return
-  }
-
-  try {
-    const result = await runQuery(props.sessionId, `select * from ${table} where ${predicate} limit 500;`)
-    setResult(result)
-    message.value = `Filter returned ${result.count} rows`
-  } catch (error) {
-    message.value = error.message
-  }
+  await goToPage(1)
 }
 
 async function runCurrentQuery() {

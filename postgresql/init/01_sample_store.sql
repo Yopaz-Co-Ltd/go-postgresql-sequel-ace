@@ -45,6 +45,16 @@ insert into app.products (sku, name, category, price, active) values
   ('USB-C-HUB', 'USB-C Hub 8-in-1', 'Adapters', 49.00, true),
   ('HDMI-2M', 'HDMI Cable 2m', 'Cables', 9.99, false);
 
+insert into app.products (sku, name, category, price, active)
+select
+  format('PRD-%04s', gs::text) as sku,
+  format('Product %s', gs) as name,
+  (array['Accessories', 'Displays', 'Adapters', 'Cables', 'Peripherals', 'Networking', 'Storage', 'Audio'])[1 + (gs % 8)] as category,
+  round((10 + (gs * 1.37 % 490))::numeric, 2) as price,
+  (gs % 5) <> 0 as active
+from generate_series(1, 2000) as gs
+on conflict (sku) do nothing;
+
 insert into app.orders (customer_id, status, ordered_at) values
   (1, 'paid', now() - interval '10 days'),
   (1, 'shipped', now() - interval '8 days'),

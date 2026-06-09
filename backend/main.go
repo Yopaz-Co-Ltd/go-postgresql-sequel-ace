@@ -47,12 +47,14 @@ type queryRequest struct {
 	SQL       string        `json:"sql"`
 	Params    []interface{} `json:"params"`
 	Limit     int           `json:"limit"`
+	Offset    int           `json:"offset"`
 }
 
 type rowsResponse struct {
 	Columns []string          `json:"columns"`
 	Rows    []json.RawMessage `json:"rows"`
 	Count   int               `json:"count"`
+	Total   int64             `json:"total"`
 }
 
 type tableInfoResponse struct {
@@ -289,8 +291,9 @@ func (s *server) tableRows(w http.ResponseWriter, r *http.Request) {
 	}
 
 	limit := parseLimit(r.URL.Query().Get("limit"))
-	sql := fmt.Sprintf("select * from %s.%s limit %d", quoteIdent(schema), quoteIdent(table), limit)
-	resp, err := queryRows(r.Context(), pool, sql)
+	offset := parseOffset(r.URL.Query().Get("offset"))
+	sql := fmt.Sprintf("select * from %s.%s", quoteIdent(schema), quoteIdent(table))
+	resp, err := queryRows(r.Context(), pool, sql, limit, offset)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err)
 		return
@@ -504,7 +507,7 @@ func (s *server) query(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp, err := queryRows(r.Context(), pool, req.SQL, req.Params...)
+	resp, err := queryRows(r.Context(), pool, req.SQL, req.Limit, req.Offset, req.Params...)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err)
 		return
@@ -575,11 +578,29 @@ func openPool(ctx context.Context, req connectionRequest) (*pgxpool.Pool, error)
 	return pool, nil
 }
 
-func queryRows(ctx context.Context, pool *pgxpool.Pool, sql string, args ...interface{}) (rowsResponse, error) {
+func queryRows(ctx context.Context, pool *pgxpool.Pool, sql string, limit int, offset int, args ...interface{}) (rowsResponse, error) {
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
-	rows, err := pool.Query(ctx, sql, args...)
+	baseSQL := normalizeSQL(sql)
+	if baseSQL == "" {
+		return rowsResponse{}, errors.New("sql is required")
+	}
+
+	total, err := countRows(ctx, pool, baseSQL, args...)
+	if err != nil {
+		return rowsResponse{}, err
+	}
+
+	dataSQL := baseSQL
+	if limit > 0 {
+		if offset < 0 {
+			offset = 0
+		}
+		dataSQL = fmt.Sprintf("select * from (%s) as __codex_rows limit %d offset %d", baseSQL, limit, offset)
+	}
+
+	rows, err := pool.Query(ctx, dataSQL, args...)
 	if err != nil {
 		return rowsResponse{}, err
 	}
@@ -591,7 +612,7 @@ func queryRows(ctx context.Context, pool *pgxpool.Pool, sql string, args ...inte
 		columns[i] = string(field.Name)
 	}
 
-	resp := rowsResponse{Columns: columns}
+	resp := rowsResponse{Columns: columns, Total: total}
 	for rows.Next() {
 		values, err := rows.Values()
 		if err != nil {
@@ -653,6 +674,29 @@ func parseLimit(raw string) int {
 		return 1000
 	}
 	return limit
+}
+
+func parseOffset(raw string) int {
+	offset, err := strconv.Atoi(raw)
+	if err != nil || offset < 0 {
+		return 0
+	}
+	return offset
+}
+
+func normalizeSQL(sql string) string {
+	sql = strings.TrimSpace(sql)
+	sql = strings.TrimSuffix(sql, ";")
+	return strings.TrimSpace(sql)
+}
+
+func countRows(ctx context.Context, pool *pgxpool.Pool, sql string, args ...interface{}) (int64, error) {
+	var total int64
+	countSQL := fmt.Sprintf("select count(*) from (%s) as __codex_count", sql)
+	if err := pool.QueryRow(ctx, countSQL, args...).Scan(&total); err != nil {
+		return 0, err
+	}
+	return total, nil
 }
 
 func quoteIdent(s string) string {
