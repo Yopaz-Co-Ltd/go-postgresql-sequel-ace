@@ -681,6 +681,111 @@ button:disabled {
   grid-template-rows: auto minmax(0, 1fr) 32px;
 }
 
+.query-main {
+  display: grid;
+  min-width: 0;
+  min-height: 0;
+  grid-template-rows: 336px 40px minmax(0, 1fr) 32px;
+}
+
+.query-editor-pane {
+  display: grid;
+  min-height: 0;
+  grid-template-columns: 46px minmax(0, 1fr);
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-input);
+}
+
+.query-line-numbers {
+  overflow: hidden;
+  border-right: 1px solid var(--border-soft);
+  background: var(--bg-input);
+  color: var(--text-tertiary);
+  padding-top: 8px;
+  text-align: right;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-size: 13px;
+  line-height: 22px;
+}
+
+.query-line-numbers span {
+  display: block;
+  padding-right: 9px;
+}
+
+.query-editor {
+  width: 100%;
+  min-width: 0;
+  height: 100%;
+  border: 0;
+  outline: 0;
+  resize: none;
+  background: var(--bg-input);
+  color: var(--text-primary);
+  padding: 8px 12px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 22px;
+}
+
+.query-actionbar {
+  display: grid;
+  grid-template-columns: 36px 170px 34px 170px minmax(180px, 1fr);
+  align-items: center;
+  gap: 10px;
+  border-bottom: 1px solid var(--border-soft);
+  background: var(--bg-surface-alt);
+  padding: 5px 8px;
+}
+
+.query-actionbar select {
+  height: 28px;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.query-actionbar button {
+  display: grid;
+  height: 28px;
+  place-items: center;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.query-run-controls {
+  display: flex;
+  justify-self: end;
+}
+
+.query-run-controls button {
+  border: 1px solid var(--border-strong);
+  background: var(--bg-input);
+}
+
+.query-run-controls .run-current-button {
+  width: 180px;
+  border-radius: 5px 0 0 5px;
+}
+
+.query-run-controls .run-menu-button {
+  width: 28px;
+  border-left: 0;
+  border-radius: 0 5px 5px 0;
+}
+
+.query-result-grid {
+  border-bottom: 1px solid var(--border-strong);
+}
+
 .content-filterbar {
   display: flex;
   flex-direction: column;
@@ -1133,6 +1238,33 @@ button:disabled {
   }
 
   .content-filterbar .filter-rule button {
+    display: none;
+  }
+
+  .query-main {
+    grid-template-rows: 260px 78px minmax(0, 1fr) 32px;
+  }
+
+  .query-actionbar {
+    grid-template-columns: 32px minmax(0, 1fr) 32px;
+  }
+
+  .query-actionbar select:nth-of-type(2),
+  .query-run-controls {
+    grid-column: 1 / -1;
+  }
+
+  .query-run-controls {
+    width: 100%;
+    justify-self: stretch;
+  }
+
+  .query-run-controls .run-current-button {
+    width: 100%;
+  }
+
+  .content-filterbar .filter-input,
+  .content-filterbar button:not(.apply-filter) {
     display: none;
   }
 
