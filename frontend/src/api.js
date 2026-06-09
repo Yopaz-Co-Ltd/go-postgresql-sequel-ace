@@ -33,8 +33,14 @@ export function getTables(sessionId, schema) {
   return request(`/api/tables?sessionId=${encodeURIComponent(sessionId)}&schema=${encodeURIComponent(schema)}`)
 }
 
-export function getTableRows(sessionId, schema, table, limit = 200) {
-  const params = new URLSearchParams({ sessionId, schema, table, limit: String(limit) })
+export function getTableRows(sessionId, schema, table, limit = 200, page = 1) {
+  const params = new URLSearchParams({
+    sessionId,
+    schema,
+    table,
+    limit: String(limit),
+    offset: String(Math.max(0, (page - 1) * limit)),
+  })
   return request(`/api/table-rows?${params}`)
 }
 
@@ -43,9 +49,14 @@ export function getTableInfo(sessionId, schema, table) {
   return request(`/api/table-info?${params}`)
 }
 
-export function runQuery(sessionId, sql) {
+export function runQuery(sessionId, sql, options = {}) {
   return request('/api/query', {
     method: 'POST',
-    body: JSON.stringify({ sessionId, sql }),
+    body: JSON.stringify({
+      sessionId,
+      sql,
+      limit: options.limit || 0,
+      offset: options.offset || 0,
+    }),
   })
 }

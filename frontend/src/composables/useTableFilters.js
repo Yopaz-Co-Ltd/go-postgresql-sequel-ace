@@ -183,18 +183,16 @@ export function useTableFilters({ getColumnType, getDefaultColumn }) {
     }
 
     if (operator === 'between') {
-      if (!rawStart || !rawEnd) return { error: 'Enter both from and to values for BETWEEN' }
+      if (!rawStart || !rawEnd) return { predicate: '' }
       return { predicate: `${column} BETWEEN '${startValue}' AND '${endValue}'` }
     }
 
     if (kind === 'boolean') {
-      if (rawValue !== 'true' && rawValue !== 'false') {
-        return { error: 'Select true or false for boolean fields' }
-      }
+      if (rawValue !== 'true' && rawValue !== 'false') return { predicate: '' }
       return { predicate: `${column} ${operator} ${rawValue}` }
     }
 
-    if (!value) return { error: 'Enter a value for each filter row' }
+    if (!value) return { predicate: '' }
 
     if (operator === 'contains') return { predicate: textPredicate('ilike', `%${value}%`) }
     if (operator === 'does_not_contain') return { predicate: `not (${textPredicate('ilike', `%${value}%`)})` }
@@ -213,7 +211,7 @@ export function useTableFilters({ getColumnType, getDefaultColumn }) {
         .map((item) => item.trim())
         .filter(Boolean)
         .map((item) => `'${escapeSql(item)}'`)
-      if (!values.length) return { error: 'Enter at least one value for IN' }
+      if (!values.length) return { predicate: '' }
 
       const clause = `${column} ${operator === 'in' ? 'IN' : 'NOT IN'} (${values.join(', ')})`
       return { predicate: operator === 'in' ? clause : `(${clause} OR ${column} IS NULL)` }
