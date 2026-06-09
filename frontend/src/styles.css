@@ -672,13 +672,12 @@ button:disabled {
   display: grid;
   min-width: 0;
   min-height: 0;
-  grid-template-rows: 36px minmax(0, 1fr) 32px;
+  grid-template-rows: auto minmax(0, 1fr) 32px;
 }
 
 .content-filterbar {
-  display: grid;
-  grid-template-columns: 28px 150px 86px minmax(220px, 1fr) 38px 38px 132px;
-  align-items: center;
+  display: flex;
+  flex-direction: column;
   gap: 7px;
   border-bottom: 1px solid var(--border);
   background: var(--bg-surface-alt);
@@ -704,12 +703,51 @@ button:disabled {
   accent-color: var(--accent);
 }
 
+.content-filterbar .filter-rules {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+}
+
+.content-filterbar .filter-rule {
+  display: grid;
+  grid-template-columns: 22px 150px 150px minmax(0, 1fr) 24px 24px;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding-right: 10px;
+}
+
 .content-filterbar .filter-input {
   background: var(--bg-input);
 }
 
+.content-filterbar .filter-value-group {
+  display: flex;
+  min-width: 0;
+  gap: 7px;
+}
+
+.content-filterbar .filter-value-group.single .filter-input {
+  width: 100%;
+}
+
+.content-filterbar .filter-check {
+  justify-self: center;
+}
+
+.content-filterbar .filter-value-group.range .filter-input {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.content-filterbar .filter-value-group.none {
+  min-height: 26px;
+}
+
 .content-filterbar button {
-  height: 25px;
+  height: 22px;
   border-radius: 5px;
   background: var(--bg-raised);
   font-weight: 700;
@@ -718,6 +756,9 @@ button:disabled {
 .content-filterbar .apply-filter {
   background: var(--accent);
   color: var(--text-on-accent);
+  align-self: end;
+  width: 132px;
+  margin-left: auto;
 }
 
 .content-grid {
@@ -902,11 +943,23 @@ button:disabled {
   }
 
   .content-filterbar {
-    grid-template-columns: 28px 1fr 70px;
+    gap: 6px;
   }
 
-  .content-filterbar .filter-input,
-  .content-filterbar button:not(.apply-filter) {
+  .content-filterbar .filter-rule {
+    grid-template-columns: 22px 1fr;
+  }
+
+  .content-filterbar .filter-value-group {
+    grid-column: 1 / -1;
+  }
+
+  .content-filterbar .filter-rule button {
     display: none;
+  }
+
+  .content-filterbar .apply-filter {
+    width: 100%;
+    align-self: stretch;
   }
 }
