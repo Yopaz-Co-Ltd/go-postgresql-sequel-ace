@@ -11,7 +11,13 @@
         <option v-for="schema in schemas" :key="schema" :value="schema">{{ schema }}</option>
       </select>
       <nav class="content-tools" aria-label="Table tools">
-        <button v-for="tool in tools" :key="tool.label" type="button" :class="{ active: tool.label === 'Content' }">
+        <button
+          v-for="tool in tools"
+          :key="tool.label"
+          type="button"
+          :class="{ active: tool.label === activeTool }"
+          @click="setActiveTool(tool.label)"
+        >
           <component :is="tool.icon" :size="24" />
           <span>{{ tool.label }}</span>
         </button>
@@ -68,6 +74,7 @@
 
     <main class="content-main">
       <FilterBar
+        v-if="activeTool === 'Content'"
         :columns="tableInformation.columns"
         :rules="filterRules"
         :column-kind="columnKind"
@@ -80,7 +87,96 @@
         @sync-rule="syncRule"
       />
 
-      <div class="content-grid">
+      <div v-if="activeTool === 'Structure'" class="structure-view">
+        <section class="structure-section structure-fields">
+          <div class="structure-filterbar">
+            <label>
+              <Search :size="16" />
+              <input v-model="structureFilter" placeholder="Filter" />
+            </label>
+          </div>
+          <div class="structure-grid">
+            <table v-if="filteredStructureColumns.length">
+              <thead>
+                <tr>
+                  <th>Field</th>
+                  <th>Type</th>
+                  <th>Length</th>
+                  <th>Allow Null</th>
+                  <th>Key</th>
+                  <th>Default</th>
+                  <th>Extra</th>
+                  <th>Encoding</th>
+                  <th>Collation</th>
+                  <th>Comment</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="column in filteredStructureColumns" :key="column.name">
+                  <td>{{ column.name }}</td>
+                  <td>{{ column.dataType }}</td>
+                  <td>{{ column.length || '-' }}</td>
+                  <td><input type="checkbox" :checked="column.nullable" disabled /></td>
+                  <td>{{ column.key || '-' }}</td>
+                  <td>{{ column.default || 'None' }}</td>
+                  <td>{{ column.extra || 'None' }}</td>
+                  <td>{{ column.encoding || '-' }}</td>
+                  <td>{{ column.collation || '-' }}</td>
+                  <td>{{ column.comment || '' }}</td>
+                </tr>
+              </tbody>
+            </table>
+            <div v-else class="empty-state">
+              <Rows3 :size="34" />
+              <span>{{ message || 'No fields loaded' }}</span>
+            </div>
+          </div>
+        </section>
+
+        <section class="structure-section structure-indexes">
+          <div class="structure-toolbar">
+            <button type="button" title="Add index"><Plus :size="17" /></button>
+            <button type="button" title="Remove index"><Minus :size="17" /></button>
+            <button type="button" title="Refresh" @click="loadTableInfo"><RefreshCw :size="16" /></button>
+            <strong>INDEXES</strong>
+          </div>
+          <div class="structure-grid">
+            <table v-if="filteredIndexes.length">
+              <thead>
+                <tr>
+                  <th>Non_unique</th>
+                  <th>Key_name</th>
+                  <th>Seq_in_index</th>
+                  <th>Column_name</th>
+                  <th>Collation</th>
+                  <th>Cardinality</th>
+                  <th>Sub_part</th>
+                  <th>Packed</th>
+                  <th>Comment</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="index in filteredIndexes" :key="`${index.keyName}-${index.sequence}-${index.columnName}`">
+                  <td>{{ index.nonUnique }}</td>
+                  <td>{{ index.keyName }}</td>
+                  <td>{{ index.sequence }}</td>
+                  <td>{{ index.columnName }}</td>
+                  <td>{{ index.collation || '-' }}</td>
+                  <td>{{ index.cardinality }}</td>
+                  <td>{{ index.subPart || 'NULL' }}</td>
+                  <td>{{ index.packed || 'NULL' }}</td>
+                  <td>{{ index.comment || '' }}</td>
+                </tr>
+              </tbody>
+            </table>
+            <div v-else class="empty-state compact">
+              <span>No indexes</span>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <div v-else class="content-grid">
         <table v-if="columns.length">
           <thead>
             <tr>
@@ -169,12 +265,14 @@ const tables = ref([])
 const selectedSchema = ref('public')
 const selectedTable = ref('')
 const tableFilter = ref('')
+const activeTool = ref('Content')
 const columns = ref([])
 const rows = ref([])
 const rowCount = ref(0)
 const message = ref('')
 const columnSearch = ref('')
-const tableInformation = ref({ created: '-', rows: 0, size: '-', columns: [] })
+const structureFilter = ref('')
+const tableInformation = ref({ created: '-', rows: 0, size: '-', columns: [], indexes: [] })
 const {
   filterRules,
   resetFilterRules,
@@ -207,6 +305,26 @@ const filteredTables = computed(() => {
   const needle = tableFilter.value.trim().toLowerCase()
   if (!needle) return tables.value
   return tables.value.filter((table) => table.name.toLowerCase().includes(needle))
+})
+const filteredStructureColumns = computed(() => {
+  const needle = structureFilter.value.trim().toLowerCase()
+  const list = tableInformation.value.columns || []
+  if (!needle) return list
+  return list.filter((column) => {
+    return [column.name, column.dataType, column.key, column.default, column.extra, column.comment]
+      .filter(Boolean)
+      .some((value) => String(value).toLowerCase().includes(needle))
+  })
+})
+const filteredIndexes = computed(() => {
+  const needle = structureFilter.value.trim().toLowerCase()
+  const list = tableInformation.value.indexes || []
+  if (!needle) return list
+  return list.filter((index) => {
+    return [index.keyName, index.columnName, index.comment]
+      .filter(Boolean)
+      .some((value) => String(value).toLowerCase().includes(needle))
+  })
 })
 
 const displayRows = computed(() => {
@@ -261,7 +379,9 @@ async function findSchemaWithTables() {
 async function selectTable(table) {
   selectedTable.value = table
   await loadTableInfo()
-  await refresh()
+  if (activeTool.value === 'Content') {
+    await refresh()
+  }
 }
 
 async function loadTableInfo() {
@@ -273,10 +393,23 @@ async function loadTableInfo() {
       rows: info.rows || 0,
       size: info.size || '-',
       columns: info.columns || [],
+      indexes: info.indexes || [],
     }
     resetFilterRules()
   } catch (error) {
     message.value = error.message
+  }
+}
+
+async function setActiveTool(tool) {
+  if (!['Structure', 'Content'].includes(tool)) return
+  activeTool.value = tool
+  if (tool === 'Structure') {
+    await loadTableInfo()
+    return
+  }
+  if (tool === 'Content' && selectedTable.value && !columns.value.length) {
+    await refresh()
   }
 }
 

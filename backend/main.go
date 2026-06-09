@@ -61,12 +61,32 @@ type tableInfoResponse struct {
 	Rows    int64        `json:"rows"`
 	Size    string       `json:"size"`
 	Columns []columnInfo `json:"columns"`
+	Indexes []indexInfo  `json:"indexes"`
 }
 
 type columnInfo struct {
-	Name     string `json:"name"`
-	DataType string `json:"dataType"`
-	Nullable bool   `json:"nullable"`
+	Name      string `json:"name"`
+	DataType  string `json:"dataType"`
+	Length    string `json:"length"`
+	Nullable  bool   `json:"nullable"`
+	Key       string `json:"key"`
+	Default   string `json:"default"`
+	Extra     string `json:"extra"`
+	Encoding  string `json:"encoding"`
+	Collation string `json:"collation"`
+	Comment   string `json:"comment"`
+}
+
+type indexInfo struct {
+	NonUnique   int64  `json:"nonUnique"`
+	KeyName     string `json:"keyName"`
+	Sequence    int64  `json:"sequence"`
+	ColumnName  string `json:"columnName"`
+	Collation   string `json:"collation"`
+	Cardinality int64  `json:"cardinality"`
+	SubPart     string `json:"subPart"`
+	Packed      string `json:"packed"`
+	Comment     string `json:"comment"`
 }
 
 func main() {
@@ -308,23 +328,80 @@ func (s *server) tableInfo(w http.ResponseWriter, r *http.Request) {
 	}
 
 	rows, err := pool.Query(r.Context(), `
+		with key_columns as (
+			select
+				tc.constraint_schema,
+				tc.table_name,
+				kcu.column_name,
+				case
+					when bool_or(tc.constraint_type = 'PRIMARY KEY') then 'PRI'
+					when bool_or(tc.constraint_type = 'UNIQUE') then 'UNI'
+					else ''
+				end as key_type
+			from information_schema.table_constraints tc
+			join information_schema.key_column_usage kcu
+			  on kcu.constraint_schema = tc.constraint_schema
+			 and kcu.constraint_name = tc.constraint_name
+			 and kcu.table_schema = tc.table_schema
+			 and kcu.table_name = tc.table_name
+			where tc.table_schema = $1
+			  and tc.table_name = $2
+			  and tc.constraint_type in ('PRIMARY KEY', 'UNIQUE')
+			group by tc.constraint_schema, tc.table_name, kcu.column_name
+		)
 		select
-			column_name,
+			c.column_name,
 			case
-				when data_type = 'character varying' then 'VARCHAR'
-				when data_type = 'timestamp without time zone' then 'TIMESTAMP'
-				when data_type = 'timestamp with time zone' then 'TIMESTAMPTZ'
-				when data_type = 'integer' then 'INT'
-				when data_type = 'bigint' then 'BIGINT'
-				when data_type = 'numeric' then 'NUMERIC'
-				when data_type = 'boolean' then 'BOOLEAN'
-				else upper(data_type)
+				when c.data_type = 'character varying' then 'VARCHAR'
+				when c.data_type = 'timestamp without time zone' then 'TIMESTAMP'
+				when c.data_type = 'timestamp with time zone' then 'TIMESTAMPTZ'
+				when c.data_type = 'integer' then 'INT'
+				when c.data_type = 'bigint' then 'BIGINT'
+				when c.data_type = 'numeric' then 'NUMERIC'
+				when c.data_type = 'boolean' then 'BOOLEAN'
+				else upper(c.data_type)
 			end as data_type,
-			is_nullable = 'YES' as nullable
-		from information_schema.columns
-		where table_schema = $1
-		  and table_name = $2
-		order by ordinal_position
+			coalesce(
+				case
+					when c.data_type in ('character varying', 'character', 'character varying') then c.character_maximum_length::text
+					else null
+				end,
+				case
+					when c.data_type = 'numeric' and c.numeric_precision is not null and c.numeric_scale is not null
+						then c.numeric_precision::text || ',' || c.numeric_scale::text
+					when c.data_type = 'numeric' and c.numeric_precision is not null then c.numeric_precision::text
+					else ''
+				end
+			) as length,
+			c.is_nullable = 'YES' as nullable,
+			coalesce(k.key_type, '') as key_type,
+			coalesce(c.column_default, '') as column_default,
+			trim(concat(
+				case when c.is_identity = 'YES' then 'identity ' else '' end,
+				case when c.is_generated <> 'NEVER' then lower(c.is_generated) else '' end
+			)) as extra,
+			'UTF-8' as encoding,
+			coalesce(c.collation_name, '') as collation,
+			coalesce(d.description, '') as comment
+		from information_schema.columns c
+		left join key_columns k
+		  on k.constraint_schema = c.table_schema
+		 and k.table_name = c.table_name
+		 and k.column_name = c.column_name
+		left join pg_namespace n
+		  on n.nspname = c.table_schema
+		left join pg_class cls
+		  on cls.relnamespace = n.oid
+		 and cls.relname = c.table_name
+		left join pg_attribute a
+		  on a.attrelid = cls.oid
+		 and a.attname = c.column_name
+		left join pg_description d
+		  on d.objoid = cls.oid
+		 and d.objsubid = a.attnum
+		where c.table_schema = $1
+		  and c.table_name = $2
+		order by c.ordinal_position
 	`, schema, table)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err)
@@ -334,13 +411,76 @@ func (s *server) tableInfo(w http.ResponseWriter, r *http.Request) {
 
 	for rows.Next() {
 		var column columnInfo
-		if err := rows.Scan(&column.Name, &column.DataType, &column.Nullable); err != nil {
+		if err := rows.Scan(
+			&column.Name,
+			&column.DataType,
+			&column.Length,
+			&column.Nullable,
+			&column.Key,
+			&column.Default,
+			&column.Extra,
+			&column.Encoding,
+			&column.Collation,
+			&column.Comment,
+		); err != nil {
 			writeError(w, http.StatusInternalServerError, err)
 			return
 		}
 		info.Columns = append(info.Columns, column)
 	}
 	if err := rows.Err(); err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+
+	indexRows, err := pool.Query(r.Context(), `
+		select
+			case when i.indisunique then 0 else 1 end as non_unique,
+			idx.relname as key_name,
+			k.ordinality::bigint as sequence,
+			coalesce(a.attname, pg_get_indexdef(i.indexrelid, k.ordinality::int, true)) as column_name,
+			case when (i.indoption[k.ordinality::int - 1] & 1) = 1 then 'D' else 'A' end as collation,
+			greatest(coalesce(tbl.reltuples::bigint, 0), 0) as cardinality,
+			'NULL' as sub_part,
+			'NULL' as packed,
+			coalesce(obj_description(i.indexrelid, 'pg_class'), '') as comment
+		from pg_index i
+		join pg_class tbl on tbl.oid = i.indrelid
+		join pg_namespace n on n.oid = tbl.relnamespace
+		join pg_class idx on idx.oid = i.indexrelid
+		cross join lateral unnest(i.indkey) with ordinality as k(attnum, ordinality)
+		left join pg_attribute a
+		  on a.attrelid = tbl.oid
+		 and a.attnum = k.attnum
+		where n.nspname = $1
+		  and tbl.relname = $2
+		order by i.indisprimary desc, idx.relname, k.ordinality
+	`, schema, table)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+	defer indexRows.Close()
+
+	for indexRows.Next() {
+		var index indexInfo
+		if err := indexRows.Scan(
+			&index.NonUnique,
+			&index.KeyName,
+			&index.Sequence,
+			&index.ColumnName,
+			&index.Collation,
+			&index.Cardinality,
+			&index.SubPart,
+			&index.Packed,
+			&index.Comment,
+		); err != nil {
+			writeError(w, http.StatusInternalServerError, err)
+			return
+		}
+		info.Indexes = append(info.Indexes, index)
+	}
+	if err := indexRows.Err(); err != nil {
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
