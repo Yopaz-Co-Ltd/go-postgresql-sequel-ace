@@ -67,23 +67,18 @@
     </aside>
 
     <main class="content-main">
-      <div class="content-filterbar">
-        <input v-model="filterEnabled" class="filter-check" type="checkbox" />
-        <select v-model="filterColumn">
-          <option v-for="column in tableInformation.columns" :key="column.name" :value="column.name">
-            {{ column.name }}
-          </option>
-        </select>
-        <select v-model="filterOperator">
-          <option value="contains">contains</option>
-          <option value="=">=</option>
-          <option value="!=">!=</option>
-        </select>
-        <input v-model="filterValue" class="filter-input" />
-        <button type="button" title="Remove filter"><Minus :size="16" /></button>
-        <button type="button" title="Add filter"><Plus :size="16" /></button>
-        <button class="apply-filter" type="button" @click="applyFilter">Apply Filter(s)</button>
-      </div>
+      <FilterBar
+        :columns="tableInformation.columns"
+        :rules="filterRules"
+        :column-kind="columnKind"
+        :operator-options-for="filterOperatorOptionsFor"
+        :value-mode-for="filterValueModeFor"
+        :value-placeholder-for="filterValuePlaceholderFor"
+        @add-rule="addFilterRule"
+        @apply="applyFilter"
+        @remove-rule="removeFilterRule"
+        @sync-rule="syncRule"
+      />
 
       <div class="content-grid">
         <table v-if="columns.length">
@@ -158,6 +153,8 @@ import {
   X,
 } from '@lucide/vue'
 import { getSchemas, getTableInfo, getTableRows, getTables, runQuery } from '../api'
+import FilterBar from './FilterBar.vue'
+import { useTableFilters } from '../composables/useTableFilters'
 
 const props = defineProps({
   sessionId: { type: String, required: true },
@@ -176,12 +173,23 @@ const columns = ref([])
 const rows = ref([])
 const rowCount = ref(0)
 const message = ref('')
-const filterEnabled = ref(true)
-const filterColumn = ref('')
-const filterOperator = ref('contains')
-const filterValue = ref('')
 const columnSearch = ref('')
 const tableInformation = ref({ created: '-', rows: 0, size: '-', columns: [] })
+const {
+  filterRules,
+  resetFilterRules,
+  syncRule,
+  addFilterRule,
+  removeFilterRule,
+  buildWherePredicate,
+  columnKind,
+  filterOperatorOptionsFor,
+  filterValueModeFor,
+  filterValuePlaceholderFor,
+} = useTableFilters({
+  getColumnType: columnType,
+  getDefaultColumn: () => tableInformation.value.columns[0]?.name || '',
+})
 
 const tools = [
   { label: 'Structure', icon: Shuffle },
@@ -252,7 +260,6 @@ async function findSchemaWithTables() {
 
 async function selectTable(table) {
   selectedTable.value = table
-  filterValue.value = ''
   await loadTableInfo()
   await refresh()
 }
@@ -267,7 +274,7 @@ async function loadTableInfo() {
       size: info.size || '-',
       columns: info.columns || [],
     }
-    filterColumn.value = tableInformation.value.columns[0]?.name || ''
+    resetFilterRules()
   } catch (error) {
     message.value = error.message
   }
@@ -285,18 +292,23 @@ async function refresh() {
 }
 
 async function applyFilter() {
-  if (!filterEnabled.value || !filterValue.value.trim() || !filterColumn.value) {
+  if (!filterRules.value.length) {
     await refresh()
     return
   }
 
-  const value = escapeSql(filterValue.value.trim())
-  const column = quoteIdent(filterColumn.value)
   const table = `${quoteIdent(selectedSchema.value)}.${quoteIdent(selectedTable.value)}`
-  const predicate =
-    filterOperator.value === 'contains'
-      ? `${column}::text ilike '%${value}%'`
-      : `${column}::text ${filterOperator.value} '${value}'`
+  const { predicate, error } = buildWherePredicate()
+
+  if (error) {
+    message.value = error
+    return
+  }
+
+  if (!predicate) {
+    await refresh()
+    return
+  }
 
   try {
     const result = await runQuery(props.sessionId, `select * from ${table} where ${predicate} limit 500;`)
@@ -338,9 +350,5 @@ function formatNumber(value) {
 
 function quoteIdent(value) {
   return `"${String(value).replaceAll('"', '""')}"`
-}
-
-function escapeSql(value) {
-  return String(value).replaceAll("'", "''")
 }
 </script>
