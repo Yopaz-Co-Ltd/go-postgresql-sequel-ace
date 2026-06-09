@@ -72,7 +72,80 @@
       </footer>
     </aside>
 
-    <main class="content-main">
+    <main v-if="activeTool === 'Query'" class="query-main">
+      <section class="query-editor-pane">
+        <div class="query-line-numbers" aria-hidden="true">
+          <span v-for="line in queryLineNumbers" :key="line">{{ line }}</span>
+        </div>
+        <textarea
+          ref="queryEditor"
+          v-model="queryText"
+          class="query-editor"
+          spellcheck="false"
+          autocomplete="off"
+          autocapitalize="off"
+          @keydown.meta.enter.prevent="runCurrentQuery"
+          @keydown.ctrl.enter.prevent="runCurrentQuery"
+        />
+      </section>
+
+      <div class="query-actionbar">
+        <button type="button" class="query-menu-button" title="Query options"><CircleEllipsis :size="17" /></button>
+        <select v-model="selectedFavoriteQuery" title="Query Favorites" @change="useFavoriteQuery">
+          <option value="">Query Favorites</option>
+          <option v-for="favorite in queryFavorites" :key="favorite.id" :value="favorite.id">{{ favorite.name }}</option>
+        </select>
+        <button type="button" title="Add query favorite" @click="addQueryFavorite"><Plus :size="16" /></button>
+        <select v-model="selectedHistoryQuery" title="Query History" @change="useHistoryQuery">
+          <option value="">Query History</option>
+          <option v-for="entry in queryHistory" :key="entry.id" :value="entry.id">{{ entry.name }}</option>
+        </select>
+        <div class="query-run-controls">
+          <button type="button" class="run-current-button" :disabled="queryBusy" @click="runCurrentQuery">
+            {{ queryBusy ? 'Running...' : 'Run Current' }}
+          </button>
+          <button type="button" class="run-menu-button" title="Run options"><ChevronDown :size="15" /></button>
+        </div>
+      </div>
+
+      <div class="query-result-grid content-grid">
+        <table v-if="queryColumns.length">
+          <thead>
+            <tr>
+              <th v-for="column in queryColumns" :key="column" :style="{ width: columnWidth(column) }">
+                <span>{{ column }}</span>
+                <small>{{ columnType(column) }}</small>
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="(row, index) in queryRows" :key="index">
+              <td v-for="column in queryColumns" :key="column">{{ formatCell(row[column]) }}</td>
+            </tr>
+          </tbody>
+        </table>
+        <div v-else class="empty-state">
+          <TerminalSquare :size="34" />
+          <span>{{ queryMessage || 'No query results' }}</span>
+        </div>
+      </div>
+
+      <footer class="content-statusbar">
+        <div class="status-tools">
+          <button type="button" title="Run query" :disabled="queryBusy" @click="runCurrentQuery"><Play :size="16" /></button>
+          <button type="button" title="Save favorite" @click="addQueryFavorite"><Star :size="16" /></button>
+          <button type="button" title="Clear editor" @click="clearQuery"><Eraser :size="16" /></button>
+        </div>
+        <strong>{{ queryStatusText }}</strong>
+        <div class="status-pager">
+          <button type="button" title="Previous history" @click="stepHistory(1)"><ChevronLeft :size="17" /></button>
+          <button type="button" title="More"><CircleEllipsis :size="17" /></button>
+          <button type="button" title="Next history" @click="stepHistory(-1)"><ChevronRight :size="17" /></button>
+        </div>
+      </footer>
+    </main>
+
+    <main v-else class="content-main">
       <FilterBar
         v-if="activeTool === 'Content'"
         :columns="tableInformation.columns"
@@ -233,11 +306,13 @@
 import { computed, onMounted, ref } from 'vue'
 import {
   Bolt,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   CircleEllipsis,
   Clock3,
   CopyPlus,
+  Eraser,
   Eye,
   Filter,
   Grid2X2,
@@ -246,19 +321,21 @@ import {
   Minus,
   Moon,
   PanelLeftClose,
+  Play,
   Plus,
   RefreshCw,
   Rows3,
   Search,
   Shuffle,
+  Star,
   Sun,
   TerminalSquare,
   Users,
   X,
 } from '@lucide/vue'
 import { getSchemas, getTableInfo, getTableRows, getTables, runQuery } from '../api'
-import FilterBar from './FilterBar.vue'
 import { useTableFilters } from '../composables/useTableFilters'
+import FilterBar from './FilterBar.vue'
 
 const props = defineProps({
   sessionId: { type: String, required: true },
@@ -268,12 +345,15 @@ const props = defineProps({
 
 defineEmits(['disconnect', 'toggle-theme'])
 
+const HISTORY_STORAGE_KEY = 'postgresql-client-query-history'
+const FAVORITES_STORAGE_KEY = 'postgresql-client-query-favorites'
+
 const schemas = ref([])
 const tables = ref([])
 const selectedSchema = ref('public')
 const selectedTable = ref('')
-const tableFilter = ref('')
 const activeTool = ref('Content')
+const tableFilter = ref('')
 const columns = ref([])
 const rows = ref([])
 const rowCount = ref(0)
@@ -282,9 +362,21 @@ const message = ref('')
 const currentPage = ref(1)
 const pageSize = ref(1000)
 const lastQueryFiltered = ref(false)
+const queryBusy = ref(false)
+const queryMessage = ref('')
+const queryText = ref('')
+const queryEditor = ref(null)
+const queryColumns = ref([])
+const queryRows = ref([])
+const queryRowCount = ref(0)
+const selectedFavoriteQuery = ref('')
+const selectedHistoryQuery = ref('')
+const queryHistory = ref([])
+const queryFavorites = ref([])
 const columnSearch = ref('')
 const structureFilter = ref('')
 const tableInformation = ref({ created: '-', rows: 0, size: '-', columns: [], indexes: [] })
+
 const {
   filterRules,
   resetFilterRules,
@@ -318,6 +410,7 @@ const filteredTables = computed(() => {
   if (!needle) return tables.value
   return tables.value.filter((table) => table.name.toLowerCase().includes(needle))
 })
+
 const filteredStructureColumns = computed(() => {
   const needle = structureFilter.value.trim().toLowerCase()
   const list = tableInformation.value.columns || []
@@ -328,6 +421,7 @@ const filteredStructureColumns = computed(() => {
       .some((value) => String(value).toLowerCase().includes(needle))
   })
 })
+
 const filteredIndexes = computed(() => {
   const needle = structureFilter.value.trim().toLowerCase()
   const list = tableInformation.value.indexes || []
@@ -354,8 +448,16 @@ const pageSummary = computed(() => {
     : `${visible} ${noun} of ${total} rows`
 })
 const windowTitle = computed(() => `(PostgreSQL) ${props.connectionName}/${selectedSchema.value}/${selectedTable.value || ''}`)
+const queryLineNumbers = computed(() => Array.from({ length: Math.max(queryText.value.split('\n').length, 12) }, (_, index) => index + 1))
+const queryStatusText = computed(() => {
+  if (queryBusy.value) return 'Running query'
+  if (queryMessage.value) return queryMessage.value
+  return `${formatNumber(queryRowCount.value)} rows returned`
+})
 
 onMounted(async () => {
+  queryHistory.value = loadStoredList(HISTORY_STORAGE_KEY)
+  queryFavorites.value = loadStoredList(FAVORITES_STORAGE_KEY)
   await loadSchemas()
 })
 
@@ -401,6 +503,9 @@ async function findSchemaWithTables() {
 async function selectTable(table) {
   selectedTable.value = table
   await loadTableInfo()
+  if (!queryText.value.trim()) {
+    queryText.value = `select *\nfrom ${quoteIdent(selectedSchema.value)}.${quoteIdent(table)}\nlimit 100;`
+  }
   if (activeTool.value === 'Content') {
     await loadRows(1)
   }
@@ -428,7 +533,7 @@ async function loadTableInfo() {
 }
 
 async function setActiveTool(tool) {
-  if (!['Structure', 'Content'].includes(tool)) return
+  if (!['Structure', 'Content', 'Query'].includes(tool)) return
   activeTool.value = tool
   if (tool === 'Structure') {
     await loadTableInfo()
@@ -492,12 +597,104 @@ async function applyFilter() {
   await goToPage(1)
 }
 
+async function runCurrentQuery() {
+  const sql = currentStatement()
+  if (!sql) {
+    queryMessage.value = 'SQL is required'
+    return
+  }
+
+  queryBusy.value = true
+  queryMessage.value = ''
+  try {
+    const result = await runQuery(props.sessionId, sql)
+    setQueryResult(result)
+    addHistory(sql)
+    queryMessage.value = result.count ? `Query returned ${result.count} rows` : 'Query executed'
+  } catch (error) {
+    queryColumns.value = []
+    queryRows.value = []
+    queryRowCount.value = 0
+    queryMessage.value = error.message
+  } finally {
+    queryBusy.value = false
+  }
+}
+
+function currentStatement() {
+  const text = queryText.value.trim()
+  if (!text) return ''
+  const editor = queryEditor.value
+  const selection =
+    editor && editor.selectionStart !== editor.selectionEnd
+      ? queryText.value.slice(editor.selectionStart, editor.selectionEnd).trim()
+      : ''
+  return selection || text
+}
+
+function addHistory(sql) {
+  const normalized = sql.trim()
+  queryHistory.value = [
+    createStoredQuery(normalized),
+    ...queryHistory.value.filter((entry) => entry.sql.trim() !== normalized),
+  ].slice(0, 25)
+  persistList(HISTORY_STORAGE_KEY, queryHistory.value)
+  selectedHistoryQuery.value = queryHistory.value[0]?.id || ''
+}
+
+function addQueryFavorite() {
+  const sql = queryText.value.trim()
+  if (!sql) {
+    queryMessage.value = 'SQL is required'
+    return
+  }
+  queryFavorites.value = [
+    createStoredQuery(sql),
+    ...queryFavorites.value.filter((entry) => entry.sql.trim() !== sql),
+  ].slice(0, 20)
+  persistList(FAVORITES_STORAGE_KEY, queryFavorites.value)
+  selectedFavoriteQuery.value = queryFavorites.value[0]?.id || ''
+  queryMessage.value = 'Query favorite saved'
+}
+
+function useFavoriteQuery() {
+  const favorite = queryFavorites.value.find((entry) => entry.id === selectedFavoriteQuery.value)
+  if (favorite) queryText.value = favorite.sql
+}
+
+function useHistoryQuery() {
+  const entry = queryHistory.value.find((item) => item.id === selectedHistoryQuery.value)
+  if (entry) queryText.value = entry.sql
+}
+
+function stepHistory(direction) {
+  if (!queryHistory.value.length) return
+  const currentIndex = queryHistory.value.findIndex((entry) => entry.id === selectedHistoryQuery.value)
+  const nextIndex = currentIndex < 0 ? 0 : (currentIndex + direction + queryHistory.value.length) % queryHistory.value.length
+  selectedHistoryQuery.value = queryHistory.value[nextIndex].id
+  useHistoryQuery()
+}
+
+function clearQuery() {
+  queryText.value = ''
+  queryColumns.value = []
+  queryRows.value = []
+  queryRowCount.value = 0
+  queryMessage.value = ''
+}
+
 function setResult(result) {
   const rawColumns = result.columns || []
   const needle = columnSearch.value.trim().toLowerCase()
   columns.value = needle ? rawColumns.filter((column) => column.toLowerCase().includes(needle)) : rawColumns
   rows.value = (result.rows || []).map((row) => (typeof row === 'string' ? JSON.parse(row) : row))
   rowCount.value = result.count || 0
+}
+
+function setQueryResult(result) {
+  queryColumns.value = result.columns || []
+  queryRows.value = (result.rows || []).map((row) => (typeof row === 'string' ? JSON.parse(row) : row))
+  queryRowCount.value = result.count || 0
 }
 
 function columnType(column) {
@@ -523,5 +720,29 @@ function formatNumber(value) {
 
 function quoteIdent(value) {
   return `"${String(value).replaceAll('"', '""')}"`
+}
+
+function createStoredQuery(sql) {
+  const firstLine = sql.split('\n').find((line) => line.trim()) || 'Untitled Query'
+  return {
+    id: crypto.randomUUID(),
+    name: firstLine.replace(/\s+/g, ' ').slice(0, 80),
+    sql,
+    createdAt: new Date().toISOString(),
+  }
+}
+
+function loadStoredList(key) {
+  try {
+    const value = JSON.parse(localStorage.getItem(key) || '[]')
+    return Array.isArray(value) ? value : []
+  } catch {
+    localStorage.removeItem(key)
+    return []
+  }
+}
+
+function persistList(key, value) {
+  localStorage.setItem(key, JSON.stringify(value))
 }
 </script>
