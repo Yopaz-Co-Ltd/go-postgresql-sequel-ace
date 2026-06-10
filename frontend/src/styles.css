@@ -31,6 +31,8 @@
   --gizmo-border: #8a87b4;
   --gizmo-bg: #c6c3e8;
   --gizmo-shadow: #7d79a7;
+  --sql-selection: rgba(126, 172, 216, 0.34);
+  --sql-active-line: rgba(10, 132, 255, 0.06);
 
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
   font-weight: 400;
@@ -71,6 +73,8 @@
   --gizmo-border: #8a87b4;
   --gizmo-bg: #c6c3e8;
   --gizmo-shadow: #7d79a7;
+  --sql-selection: rgba(106, 142, 188, 0.38);
+  --sql-active-line: rgba(64, 156, 255, 0.1);
 }
 
 * {
@@ -689,44 +693,72 @@ button:disabled {
 }
 
 .query-editor-pane {
-  display: grid;
+  display: block;
   min-height: 0;
-  grid-template-columns: 46px minmax(0, 1fr);
   border-bottom: 1px solid var(--border);
   background: var(--bg-input);
 }
 
-.query-line-numbers {
-  overflow: hidden;
-  border-right: 1px solid var(--border-soft);
-  background: var(--bg-input);
-  color: var(--text-tertiary);
-  padding-top: 8px;
-  text-align: right;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
-  font-size: 13px;
-  line-height: 22px;
-}
-
-.query-line-numbers span {
-  display: block;
-  padding-right: 9px;
-}
-
-.query-editor {
+.query-editor-pane .vue-codemirror {
   width: 100%;
   min-width: 0;
   height: 100%;
-  border: 0;
-  outline: 0;
-  resize: none;
+  overflow: hidden;
+}
+
+.query-editor-pane .cm-editor {
+  height: 100%;
   background: var(--bg-input);
   color: var(--text-primary);
-  padding: 8px 12px;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
   font-size: 15px;
-  font-weight: 600;
+}
+
+.query-editor-pane .cm-focused {
+  outline: none;
+}
+
+.query-editor-pane .cm-scroller {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
   line-height: 22px;
+}
+
+.query-editor-pane .cm-content {
+  min-height: 100%;
+  padding: 8px 12px;
+  font-weight: 600;
+}
+
+.query-editor-pane .cm-line {
+  padding: 0;
+}
+
+.query-editor-pane .cm-gutters {
+  border-right: 1px solid var(--border-soft);
+  background: var(--bg-input);
+  color: var(--text-tertiary);
+}
+
+.query-editor-pane .cm-lineNumbers .cm-gutterElement {
+  padding: 0 9px 0 0;
+}
+
+.query-editor-pane .cm-activeLine,
+.query-editor-pane .cm-activeLineGutter {
+  background: var(--sql-active-line);
+}
+
+.query-editor-pane .cm-selectionLayer .cm-selectionBackground,
+.query-editor-pane .cm-selectionBackground,
+.query-editor-pane .cm-focused .cm-selectionBackground {
+  background: var(--sql-selection) !important;
+}
+
+.query-editor-pane .cm-content ::selection {
+  background: var(--sql-selection) !important;
+}
+
+.query-editor-pane .cm-cursor {
+  border-left-color: var(--text-primary);
 }
 
 .query-actionbar {

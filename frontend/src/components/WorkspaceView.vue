@@ -74,18 +74,17 @@
 
     <main v-if="activeTool === 'Query'" class="query-main">
       <section class="query-editor-pane">
-        <div class="query-line-numbers" aria-hidden="true">
-          <span v-for="line in queryLineNumbers" :key="line">{{ line }}</span>
-        </div>
-        <textarea
+        <CodeMirror
           ref="queryEditor"
           v-model="queryText"
           class="query-editor"
-          spellcheck="false"
-          autocomplete="off"
-          autocapitalize="off"
-          @keydown.meta.enter.prevent="runCurrentQuery"
-          @keydown.ctrl.enter.prevent="runCurrentQuery"
+          :basic="true"
+          :dark="theme === 'dark'"
+          :lang="querySqlLanguage"
+          :keymap="queryEditorKeymap"
+          :tab-size="2"
+          indent-unit="  "
+          placeholder="Write SQL query..."
         />
       </section>
 
@@ -333,6 +332,8 @@ import {
   Users,
   X,
 } from '@lucide/vue'
+import CodeMirror from 'vue-codemirror6'
+import { PostgreSQL, sql } from '@codemirror/lang-sql'
 import { getSchemas, getTableInfo, getTableRows, getTables, runQuery } from '../api'
 import { useTableFilters } from '../composables/useTableFilters'
 import FilterBar from './FilterBar.vue'
@@ -448,7 +449,41 @@ const pageSummary = computed(() => {
     : `${visible} ${noun} of ${total} rows`
 })
 const windowTitle = computed(() => `(PostgreSQL) ${props.connectionName}/${selectedSchema.value}/${selectedTable.value || ''}`)
-const queryLineNumbers = computed(() => Array.from({ length: Math.max(queryText.value.split('\n').length, 12) }, (_, index) => index + 1))
+const queryCompletionSchema = computed(() => {
+  if (!selectedSchema.value) return {}
+  return {
+    [selectedSchema.value]: Object.fromEntries(
+      tables.value.map((table) => [
+        table.name,
+        table.name === selectedTable.value ? tableInformation.value.columns.map((column) => column.name) : [],
+      ]),
+    ),
+  }
+})
+const querySqlLanguage = computed(() =>
+  sql({
+    dialect: PostgreSQL,
+    schema: queryCompletionSchema.value,
+    defaultSchema: selectedSchema.value || undefined,
+    upperCaseKeywords: true,
+  }),
+)
+const queryEditorKeymap = [
+  {
+    key: 'Mod-Enter',
+    run: () => {
+      runCurrentQuery()
+      return true
+    },
+  },
+  {
+    key: 'Ctrl-Enter',
+    run: () => {
+      runCurrentQuery()
+      return true
+    },
+  },
+]
 const queryStatusText = computed(() => {
   if (queryBusy.value) return 'Running query'
   if (queryMessage.value) return queryMessage.value
@@ -624,11 +659,7 @@ async function runCurrentQuery() {
 function currentStatement() {
   const text = queryText.value.trim()
   if (!text) return ''
-  const editor = queryEditor.value
-  const selection =
-    editor && editor.selectionStart !== editor.selectionEnd
-      ? queryText.value.slice(editor.selectionStart, editor.selectionEnd).trim()
-      : ''
+  const selection = queryEditor.value?.getSelection?.().trim() || ''
   return selection || text
 }
 
